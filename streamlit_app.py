@@ -1,134 +1,126 @@
 import streamlit as st
+import math
 import pandas as pd
 import time
-from PIL import Image
+import random
 
-# ==============================
-# 🔬 SIMULADOR BIOMECÁNICO VISUAL
-# ==============================
+st.set_page_config(page_title="Simulador Biomecánico", page_icon="🦖", layout="wide")
 
-st.set_page_config(page_title="Simulador Biomecánico Visual", layout="wide")
+# --- Título ---
+st.title("🦖 Simulador Biomecánico de Dinosaurios y Animales Modernos")
+st.write("""
+Explora cómo distintos animales reaccionarían a cambios extremos en el ambiente.
+Ajusta los parámetros y observa qué pasaría biomecánicamente.
+""")
 
-# ---- Datos base ----
+# --- Parámetros del ecosistema ---
+st.sidebar.header("🌍 Ecosistema")
+ecosistema = st.sidebar.selectbox(
+    "Selecciona un ambiente",
+    ["Selva", "Desierto", "Tundra", "Montaña", "Fondo marino"]
+)
+
+presion = st.sidebar.slider("Presión atmosférica (atm)", 0.1, 10.0, 1.0, 0.1)
+temperatura = st.sidebar.slider("Temperatura (°C)", -50, 60, 25)
+oxigeno = st.sidebar.slider("Concentración de oxígeno (%)", 1, 40, 21)
+altitud = st.sidebar.slider("Altitud (m)", -10000, 8000, 0)
+
+# --- Base de datos de animales ---
 animales = {
-    "Tyrannosaurus rex": {"masa": 7000, "velocidad": 8, "temp": 38, "respiracion": "pulmones tipo ave"},
-    "Velociraptor mongoliensis": {"masa": 15, "velocidad": 18, "temp": 39, "respiracion": "pulmones tipo ave"},
-    "Brachiosaurus altithorax": {"masa": 56000, "velocidad": 4, "temp": 36, "respiracion": "pulmones tipo ave"},
-    "Panthera tigris": {"masa": 220, "velocidad": 17, "temp": 38, "respiracion": "pulmones mamífero"},
-    "Loxodonta africana": {"masa": 6000, "velocidad": 6, "temp": 36, "respiracion": "pulmones mamífero"},
-    "Aquila chrysaetos": {"masa": 6, "velocidad": 30, "temp": 40, "respiracion": "pulmones tipo ave"}
+    "Tyrannosaurus rex": {"masa": 7000, "femur": 1.2, "tipo": "dinosaurio"},
+    "Velociraptor mongoliensis": {"masa": 15, "femur": 0.3, "tipo": "dinosaurio"},
+    "Brachiosaurus altithorax": {"masa": 35000, "femur": 2.5, "tipo": "dinosaurio"},
+    "Spinosaurus aegyptiacus": {"masa": 6000, "femur": 1.5, "tipo": "dinosaurio"},
+    "Elephas maximus (Elefante)": {"masa": 5400, "femur": 1.2, "tipo": "actual"},
+    "Panthera leo (León)": {"masa": 190, "femur": 0.6, "tipo": "actual"},
 }
 
-# ---- Variables de sesión ----
-if "simulando" not in st.session_state:
-    st.session_state.simulando = False
-if "resultados" not in st.session_state:
-    st.session_state.resultados = None
+nombre = st.selectbox("Selecciona un animal", list(animales.keys()))
+animal = animales[nombre]
 
-# ---- Sidebar ----
-st.sidebar.title("⚙️ Configuración del entorno")
-animal_sel = st.sidebar.selectbox("Selecciona el animal", list(animales.keys()))
+# --- Funciones biomecánicas ---
+def fuerza_muscular(masa, longitud):
+    return 0.3 * masa * math.sqrt(longitud)
 
-presion = st.sidebar.slider("Presión (kPa)", 50, 150, 101)
-temperatura = st.sidebar.slider("Temperatura (°C)", -30, 50, 25)
-altitud = st.sidebar.slider("Altitud (m)", 0, 8000, 0)
-gravedad = st.sidebar.slider("Gravedad (m/s²)", 5.0, 25.0, 9.8)
-humedad = st.sidebar.slider("Humedad (%)", 0, 100, 50)
+def velocidad_maxima(masa, longitud):
+    return 8 * (longitud / math.pow(masa, 1/3))
 
-fondo = st.sidebar.file_uploader("Fondo del ecosistema (PNG)", type=["png"])
-sprite = st.sidebar.file_uploader("Sprite del animal (PNG)", type=["png"])
+def evaluar_adaptacion(presion, temp, oxigeno, altitud, ecosistema, tipo):
+    # Factores ambientales
+    score = 100
+    descripciones = []
 
-col1, col2 = st.sidebar.columns(2)
-start_btn = col1.button("▶️ Iniciar simulación")
-reset_btn = col2.button("🔄 Reiniciar")
+    if ecosistema == "Fondo marino" and tipo != "dinosaurio":
+        descripciones.append("❌ No puede respirar bajo el agua.")
+        score -= 80
+    elif ecosistema == "Fondo marino" and tipo == "dinosaurio":
+        descripciones.append("🐊 Si tiene adaptaciones acuáticas, puede sobrevivir parcialmente.")
+        score -= 40
 
-# ---- Reset ----
-if reset_btn:
-    st.session_state.simulando = False
-    st.session_state.resultados = None
-    st.rerun()
+    if oxigeno < 10:
+        descripciones.append("🫁 Bajo nivel de oxígeno reduce su energía y velocidad.")
+        score -= 25
 
-# ---- Mostrar fondo ----
-if fondo:
-    st.image(fondo, use_column_width=True)
-else:
-    st.info("Sube un fondo PNG para el ecosistema.")
+    if temperatura < 0:
+        descripciones.append("❄️ El frío extremo afecta sus músculos y movilidad.")
+        score -= 20
+    elif temperatura > 45:
+        descripciones.append("🔥 El calor extremo puede causar colapso térmico.")
+        score -= 30
 
-# ---- Simulación ----
-if start_btn:
-    st.session_state.simulando = True
-    st.session_state.resultados = None
+    if presion > 5:
+        descripciones.append("⚙️ Alta presión afecta el sistema respiratorio y circulación.")
+        score -= 25
 
-if st.session_state.simulando:
-    datos = animales[animal_sel]
-    masa = datos["masa"]
-    vel_base = datos["velocidad"]
+    if altitud > 3000:
+        descripciones.append("⛰️ La altura reduce el oxígeno disponible.")
+        score -= 15
 
-    st.subheader(f"🦖 Simulando {animal_sel} en ambiente extremo...")
-
-    placeholder = st.empty()
-    descripcion = st.empty()
-
-    eventos = []
-    for segundo in range(1, 11):
-        time.sleep(0.5)
-        cambio_vel = 1.0
-        estado = "Normal"
-
-        if presion < 80:
-            cambio_vel -= 0.1
-            estado = "Hipoxia leve"
-        elif presion < 60:
-            cambio_vel -= 0.3
-            estado = "Hipoxia severa"
-        elif presion > 130:
-            cambio_vel -= 0.2
-            estado = "Daño pulmonar por presión"
-
-        if temperatura < 0:
-            cambio_vel -= 0.15
-            estado = "Congelación muscular"
-        elif temperatura > 40:
-            cambio_vel -= 0.2
-            estado = "Estrés térmico"
-
-        if gravedad > 15:
-            cambio_vel -= 0.25
-            estado = "Sobrecarga muscular"
-        elif gravedad < 7:
-            cambio_vel -= 0.1
-            estado = "Desorientación por baja gravedad"
-
-        vel_actual = max(vel_base * cambio_vel, 0)
-
-        eventos.append({
-            "segundo": segundo,
-            "estado": estado,
-            "velocidad": vel_actual
-        })
-
-        descripcion.write(f"**Segundo {segundo}:** {estado}. Velocidad: {vel_actual:.2f} m/s")
-        placeholder.progress(segundo / 10)
-
-    # ---- Evaluar resultado final ----
-    estado_final = eventos[-1]["estado"]
-    vel_final = eventos[-1]["velocidad"]
-    sobrevivio = vel_final > 0.5 * vel_base
-
-    if sobrevivio:
-        st.success(f"✅ {animal_sel} logró adaptarse parcialmente al ambiente.")
-        conclusion = "El animal sobrevivió, aunque con adaptaciones necesarias para mantener la homeostasis."
+    if score < 40:
+        estado = "💀 Muere durante la simulación."
+    elif score < 70:
+        estado = "⚠️ Sobrevive con dificultades."
     else:
-        st.error(f"💀 {animal_sel} no logró sobrevivir al entorno.")
-        conclusion = "Las condiciones ambientales superaron su fisiología; sufriría fallo sistémico o muerte."
+        estado = "✅ Se adapta exitosamente."
 
-    st.subheader("📋 Informe final")
-    st.write(f"**Condición final:** {estado_final}")
-    st.write(f"**Velocidad final:** {vel_final:.2f} m/s")
-    st.write(f"**Conclusión:** {conclusion}")
+    return score, estado, descripciones
 
-    st.session_state.resultados = pd.DataFrame(eventos)
-    st.line_chart(st.session_state.resultados.set_index("segundo")["velocidad"], use_container_width=True)
+# --- Cálculos biomecánicos ---
+masa = animal["masa"]
+femur = animal["femur"]
+tipo = animal["tipo"]
 
-    st.session_state.simulando = False
+fuerza = fuerza_muscular(masa, femur)
+velocidad = velocidad_maxima(masa, femur)
+
+# --- Mostrar info inicial ---
+col1, col2 = st.columns([1, 2])
+with col1:
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Tyrannosaurus_rex_NT.jpg/220px-Tyrannosaurus_rex_NT.jpg", width=200)
+    st.markdown(f"**Masa:** {masa} kg")
+    st.markdown(f"**Longitud del fémur:** {femur} m")
+    st.markdown(f"**Tipo:** {tipo}")
+with col2:
+    st.subheader("Datos biomecánicos base")
+    st.write(f"**Fuerza muscular estimada:** {fuerza:.2f} N")
+    st.write(f"**Velocidad máxima teórica:** {velocidad:.2f} m/s")
+
+# --- Simulación ---
+if st.button("▶️ Iniciar simulación"):
+    st.subheader("Simulando condiciones ambientales...")
+    with st.empty():
+        for i in range(10):
+            st.write(f"🦖 {nombre} adaptándose... ({i+1}/10)")
+            time.sleep(0.5)
+        score, estado, desc = evaluar_adaptacion(presion, temperatura, oxigeno, altitud, ecosistema, tipo)
+        st.success(f"**Resultado final: {estado}**")
+        st.progress(score / 100)
+        st.write("**Efectos observados:**")
+        for d in desc:
+            st.write("-", d)
+
+# --- Reset ---
+if st.button("🔄 Reiniciar simulación"):
+    st.experimental_rerun()
+
 
