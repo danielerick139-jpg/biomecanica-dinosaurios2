@@ -289,7 +289,7 @@ with col_anim:
         }} else if (habitat === 'marino') {{
             y = Math.floor(height * 0.12); // start near surface/top
         }} else {{
-            # terrestrial start lower within band
+            // terrestrial start lower within band
             y = Math.floor(yMin + (yMax - yMin) * 0.05);
         }}
         sprite.style.left = x + 'px';
@@ -502,4 +502,3 @@ st.dataframe(pd.concat([results_df.head(4), results_df.tail(4)]).reset_index(dro
 
 csv = results_df.to_csv(index=False).encode('utf-8')
 st.download_button("⬇️ Descargar datos de la simulación (CSV)", csv, file_name=f"sim_{species_name.replace(' ','_')}.csv", mime="text/csv")
-
