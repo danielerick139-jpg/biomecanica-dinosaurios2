@@ -54,6 +54,7 @@ species_name = st.sidebar.selectbox("Selecciona especie", list(SPECIES.keys()),
 environment = st.sidebar.selectbox("Selecciona bioma/ambiente (donde se coloca el animal)",
                                    ["Llanura", "Selva", "Desierto", "Montaña", "Fondo marino"],
                                    index=["Llanura", "Selva", "Desierto", "Montaña", "Fondo marino"].index(st.session_state.get("environment", DEFAULTS["environment"])),
+
                                    key="environment")
 
 bg_file = st.sidebar.file_uploader("Sube fondo (PNG/JPG)", type=["png","jpg","jpeg"], key="bg_file")
@@ -231,200 +232,201 @@ payload = {
     "narrative_array": timeline["narrative"],
 }
 
-# Render UI: left = animation, right = live metrics & final results
-col_anim, col_info = st.columns([2,1])
-
-with col_anim:
-    st.subheader("Visualización (animación en tiempo real)")
-    payload_json = json.dumps(payload)
-    html = f"""
-    <div id="sim_container" style="width:{payload['width']}px; height:{payload['height']}px; border-radius:12px; overflow:hidden; position:relative;
-        background-image:url('data:image/png;base64,{payload['bg_b64']}'); background-size:cover; background-position:center;">
-        <img id="animal_sprite" src="data:image/png;base64,{payload['sprite_b64']}" style="position:absolute; left:0px; top:0px; width:120px; transition: left 0.35s linear, top 0.35s linear, opacity 0.35s linear, transform 0.35s linear;"/>
-        <div id="hud" style="position:absolute; left:10px; top:10px; background:rgba(0,0,0,0.45); color:white; padding:8px; border-radius:6px; font-family:Arial, sans-serif;">
-            <div id="timer">Tiempo: 0s</div>
-            <div id="energy">Energía: 100</div>
-            <div id="narr">Estado: -</div>
-        </div>
-        <div id="end_overlay" style="position:absolute; left:0; top:0; width:100%; height:100%; display:none;
-             align-items:center; justify-content:center; background:rgba(0,0,0,0.6); color:white; font-size:22px;">
-            <div id="end_text" style="text-align:center;"></div>
-        </div>
+# -------------------------
+# Render: ANIMACIÓN arriba, métricas debajo
+# -------------------------
+st.subheader("Visualización (animación en tiempo real)")
+payload_json = json.dumps(payload)
+html = f"""
+<div id="sim_container" style="width:{payload['width']}px; height:{payload['height']}px; border-radius:12px; overflow:hidden; position:relative;
+    background-image:url('data:image/png;base64,{payload['bg_b64']}'); background-size:cover; background-position:center;">
+    <img id="animal_sprite" src="data:image/png;base64,{payload['sprite_b64']}" style="position:absolute; left:0px; top:0px; width:120px; transition: left 0.35s linear, top 0.35s linear, opacity 0.35s linear, transform 0.35s linear;"/>
+    <div id="hud" style="position:absolute; left:10px; top:10px; background:rgba(0,0,0,0.45); color:white; padding:8px; border-radius:6px; font-family:Arial, sans-serif;">
+        <div id="timer">Tiempo: 0s</div>
+        <div id="energy">Energía: 100</div>
+        <div id="narr">Estado: -</div>
     </div>
-    <script>
-    (function(){{
-        const payload = {payload_json};
-        const steps = payload.steps;
-        const stepInterval = payload.step_interval * 1000;
-        const totalMs = payload.sim_duration * 1000;
-        const sprite = document.getElementById('animal_sprite');
-        const container = document.getElementById('sim_container');
-        const timerEl = document.getElementById('timer');
-        const energyEl = document.getElementById('energy');
-        const narrEl = document.getElementById('narr');
-        const endOverlay = document.getElementById('end_overlay');
-        const endText = document.getElementById('end_text');
+    <div id="end_overlay" style="position:absolute; left:0; top:0; width:100%; height:100%; display:none;
+         align-items:center; justify-content:center; background:rgba(0,0,0,0.6); color:white; font-size:22px;">
+        <div id="end_text" style="text-align:center;"></div>
+    </div>
+</div>
+<script>
+(function(){{
+    const payload = {payload_json};
+    const steps = payload.steps;
+    const stepInterval = payload.step_interval * 1000;
+    const totalMs = payload.sim_duration * 1000;
+    const sprite = document.getElementById('animal_sprite');
+    const container = document.getElementById('sim_container');
+    const timerEl = document.getElementById('timer');
+    const energyEl = document.getElementById('energy');
+    const narrEl = document.getElementById('narr');
+    const endOverlay = document.getElementById('end_overlay');
+    const endText = document.getElementById('end_text');
 
-        let width = payload.width;
-        let height = payload.height;
-        let region = payload.region;
-        let habitat = payload.habitat;
-        let environment = payload.environment;
+    let width = payload.width;
+    let height = payload.height;
+    let region = payload.region;
+    let habitat = payload.habitat;
+    let environment = payload.environment;
 
-        const speedArr = payload.speed_array;
-        const energyArr = payload.energy_array;
-        const narrativeArr = payload.narrative_array;
+    const speedArr = payload.speed_array;
+    const energyArr = payload.energy_array;
+    const narrativeArr = payload.narrative_array;
 
-        // region fractions to px
-        const yMin = Math.floor(region.y_min_frac * height);
-        const yMax = Math.floor(region.y_max_frac * height);
-        const xMin = Math.floor(0.05 * width);
-        const xMax = Math.floor(0.92 * width);
+    // region fractions to px
+    const yMin = Math.floor(region.y_min_frac * height);
+    const yMax = Math.floor(region.y_max_frac * height);
+    const xMin = Math.floor(0.05 * width);
+    const xMax = Math.floor(0.92 * width);
 
-        // initial position depends on habitat & environment
-        let x = Math.floor((xMin + xMax) / 8); // start left-ish
-        let y;
-        if (habitat === 'volador') {{
-            y = Math.floor(height * 0.08); // start near top
+    // initial position depends on habitat & environment
+    let x = Math.floor((xMin + xMax) / 8); // start left-ish
+    let y;
+    if (habitat === 'volador') {{
+        y = Math.floor(height * 0.08); // start near top
+    }} else if (habitat === 'marino') {{
+        y = Math.floor(height * 0.12); // start near surface/top
+    }} else {{
+        // terrestrial start lower within band
+        y = Math.floor(yMin + (yMax - yMin) * 0.05);
+    }}
+    sprite.style.left = x + 'px';
+    sprite.style.top = y + 'px';
+
+    // For terrestrial: move horizontally, bounce at edges; minimal vertical bob
+    // For volador: maintain altitude unless energy low -> descend
+    // For marino: if environment is marine and species marine => swim 2D; else sink
+
+    let step = 0;
+    let elapsedMs = 0;
+    let died = false;
+    let deathReason = "";
+    let dir = 1; // horizontal direction for terrestrial/volador
+
+    let intervalId = setInterval(() => {{
+        const idx = Math.min(step, steps-1);
+        const speedRatio = speedArr[idx]; // 0..1 roughly
+        const energy = Math.round(energyArr[idx]);
+        const narrative = narrativeArr[idx];
+
+        timerEl.innerText = 'Tiempo: ' + Math.round(elapsedMs/1000) + ' s';
+        energyEl.innerText = 'Energía: ' + energy;
+        narrEl.innerText = narrative ? ('Estado: ' + narrative) : 'Estado: sin eventos';
+
+        // Movement logic by habitat
+        if (habitat === 'terrestre') {{
+            // move horizontally in straight line within bottom band
+            const step_px = Math.round((4 + 18 * speedRatio) * dir); // speed depends on energy
+            x = x + step_px;
+            // small bob
+            const bob = Math.round(Math.sin(step * 0.6) * 4);
+            y = Math.floor(yMin + (yMax - yMin) * 0.06) + bob;
+
+            // bounce on edges
+            if (x >= xMax) {{ x = xMax; dir = -1; }}
+            if (x <= xMin) {{ x = xMin; dir = 1; }}
+
+            // If placed in marine environment and not marine species -> sink
+            if (environment === 'Fondo marino' && habitat !== 'marino') {{
+                y += Math.round((1.0 - speedRatio) * 8);
+                sprite.style.opacity = Math.max(0.12, energy/100);
+                if (y > height - 80) {{ died = true; deathReason = 'Hundimiento/Asfixia en ambiente marino.'; }}
+            }}
+        }} else if (habitat === 'volador') {{
+            // horizontal motion with altitude maintenance; descent if low energy
+            const step_px = Math.round((6 + 24 * speedRatio) * dir);
+            x = x + step_px;
+            if (x >= xMax) {{ x = xMax; dir = -1; }}
+            if (x <= xMin) {{ x = xMin; dir = 1; }}
+
+            if (energy < 60) {{
+                // descend proportionally to energy deficit
+                y += Math.round((60 - energy) / 10.0);
+            }} else {{
+                // small variations
+                y = Math.max(5, Math.min(Math.floor(yMax*0.6), y + Math.round(Math.sin(step*0.7)*3)));
+            }}
+
+            if (environment === 'Fondo marino' && energy < 30) {{
+                y += 6 + Math.round((30 - energy)/6.0);
+            }}
+            sprite.style.opacity = Math.max(0.2, energy / 100);
+            if (y > height - 80) {{ died = true; deathReason = 'Caída/impacto fatal o inmersión (volador).'; }}
         }} else if (habitat === 'marino') {{
-            y = Math.floor(height * 0.12); // start near surface/top
-        }} else {{
-            // terrestrial start lower within band
-            y = Math.floor(yMin + (yMax - yMin) * 0.05);
+            // if environment is marine and species marine => swim 2D random walk biased by speed
+            if (environment === 'Fondo marino') {{
+                // target towards random points; movement scaled by speedRatio
+                let tx = Math.floor(Math.random() * (xMax - xMin) + xMin);
+                let ty = Math.floor(Math.random() * (yMax - yMin) + yMin);
+                x = Math.round(x + (tx - x) * (0.18 + 0.7 * speedRatio));
+                y = Math.round(y + (ty - y) * (0.18 + 0.7 * speedRatio));
+                sprite.style.opacity = Math.max(0.25, energy / 100);
+            }} else {{
+                // marine species out of water -> slide/fall and fade
+                y += Math.round((1.0 - speedRatio) * 8);
+                sprite.style.opacity = Math.max(0.05, energy / 100);
+                if (y > height - 80) {{ died = true; deathReason = 'Exposición fuera del agua: fallo respiratorio.'; }}
+            }}
         }}
+
+        // Visual filters by energy
+        if (energy < 30) {{
+            sprite.style.filter = 'grayscale(80%) brightness(65%)';
+            sprite.style.transform = 'rotate(' + (Math.sin(step*0.3)*6) + 'deg)';
+        }} else if (energy < 60) {{
+            sprite.style.filter = 'grayscale(35%) brightness(85%)';
+            sprite.style.transform = 'rotate(' + (Math.sin(step*0.2)*3) + 'deg)';
+        }} else {{
+            sprite.style.filter = 'none';
+            sprite.style.transform = 'rotate(0deg)';
+        }}
+
+        // clamp positions so sprite never leaves container
+        x = Math.max(0, Math.min(width - 60, x));
+        y = Math.max(0, Math.min(height - 60, y));
         sprite.style.left = x + 'px';
         sprite.style.top = y + 'px';
 
-        // For terrestrial: move horizontally, bounce at edges; minimal vertical bob
-        // For volador: maintain altitude unless energy low -> descend
-        // For marino: if environment is marine and species marine => swim 2D; else sink
+        // kill by extreme low energy
+        if (energy <= 2 && !died) {{
+            died = true;
+            deathReason = 'Fallo sistémico por energía crítica baja.';
+        }}
 
-        let step = 0;
-        let elapsedMs = 0;
-        let died = false;
-        let deathReason = "";
-        let dir = 1; // horizontal direction for terrestrial/volador
+        step += 1;
+        elapsedMs += stepInterval;
+        if (elapsedMs >= totalMs || step >= steps || died) {{
+            clearInterval(intervalId);
+            const finalEnergy = energyArr[Math.min(steps-1, step-1)];
+            let verdict = 'VIVO / ADAPTADO';
+            if (died) verdict = 'MUERTO: ' + deathReason;
+            else if (finalEnergy < 40) verdict = 'DEBIL / Sobrevive con dificultades';
+            else if (finalEnergy < 65) verdict = 'PARCIALMENTE adaptado (fatigado)';
+            endText.innerHTML = '<div style="padding:20px; text-align:center;"><strong>Simulación finalizada</strong><br><br>Veredicto: <em>'+verdict+'</em><br><br>Observación final: '+(deathReason || 'Ninguna')+'</div>';
+            endOverlay.style.display = 'flex';
+        }}
+    }}, stepInterval);
 
-        let intervalId = setInterval(() => {{
-            const idx = Math.min(step, steps-1);
-            const speedRatio = speedArr[idx]; // 0..1 roughly
-            const energy = Math.round(energyArr[idx]);
-            const narrative = narrativeArr[idx];
+}})();
+</script>
+"""
+st.components.v1.html(html, height=payload["height"]+20, scrolling=False)
 
-            timerEl.innerText = 'Tiempo: ' + Math.round(elapsedMs/1000) + ' s';
-            energyEl.innerText = 'Energía: ' + energy;
-            narrEl.innerText = narrative ? ('Estado: ' + narrative) : 'Estado: sin eventos';
-
-            // Movement logic by habitat
-            if (habitat === 'terrestre') {{
-                // move horizontally in straight line within bottom band
-                const step_px = Math.round((4 + 18 * speedRatio) * dir); // speed depends on energy
-                x = x + step_px;
-                // small bob
-                const bob = Math.round(Math.sin(step * 0.6) * 4);
-                y = Math.floor(yMin + (yMax - yMin) * 0.06) + bob;
-
-                // bounce on edges
-                if (x >= xMax) {{ x = xMax; dir = -1; }}
-                if (x <= xMin) {{ x = xMin; dir = 1; }}
-
-                // If placed in marine environment and not marine species -> sink
-                if (environment === 'Fondo marino' && habitat !== 'marino') {{
-                    y += Math.round((1.0 - speedRatio) * 8);
-                    sprite.style.opacity = Math.max(0.12, energy/100);
-                    if (y > height - 80) {{ died = true; deathReason = 'Hundimiento/Asfixia en ambiente marino.'; }}
-                }}
-            }} else if (habitat === 'volador') {{
-                // horizontal motion with altitude maintenance; descent if low energy
-                const step_px = Math.round((6 + 24 * speedRatio) * dir);
-                x = x + step_px;
-                if (x >= xMax) {{ x = xMax; dir = -1; }}
-                if (x <= xMin) {{ x = xMin; dir = 1; }}
-
-                if (energy < 60) {{
-                    // descend proportionally to energy deficit
-                    y += Math.round((60 - energy) / 10.0);
-                }} else {{
-                    // small variations
-                    y = Math.max(5, Math.min(Math.floor(yMax*0.6), y + Math.round(Math.sin(step*0.7)*3)));
-                }}
-
-                if (environment === 'Fondo marino' && energy < 30) {{
-                    y += 6 + Math.round((30 - energy)/6.0);
-                }}
-                sprite.style.opacity = Math.max(0.2, energy / 100);
-                if (y > height - 80) {{ died = true; deathReason = 'Caída/impacto fatal o inmersión (volador).'; }}
-            }} else if (habitat === 'marino') {{
-                // if environment is marine and species marine => swim 2D random walk biased by speed
-                if (environment === 'Fondo marino') {{
-                    // target towards random points; movement scaled by speedRatio
-                    let tx = Math.floor(Math.random() * (xMax - xMin) + xMin);
-                    let ty = Math.floor(Math.random() * (yMax - yMin) + yMin);
-                    x = Math.round(x + (tx - x) * (0.18 + 0.7 * speedRatio));
-                    y = Math.round(y + (ty - y) * (0.18 + 0.7 * speedRatio));
-                    sprite.style.opacity = Math.max(0.25, energy / 100);
-                }} else {{
-                    // marine species out of water -> slide/fall and fade
-                    y += Math.round((1.0 - speedRatio) * 8);
-                    sprite.style.opacity = Math.max(0.05, energy / 100);
-                    if (y > height - 80) {{ died = true; deathReason = 'Exposición fuera del agua: fallo respiratorio.'; }}
-                }}
-            }}
-
-            // Visual filters by energy
-            if (energy < 30) {{
-                sprite.style.filter = 'grayscale(80%) brightness(65%)';
-                sprite.style.transform = 'rotate(' + (Math.sin(step*0.3)*6) + 'deg)';
-            }} else if (energy < 60) {{
-                sprite.style.filter = 'grayscale(35%) brightness(85%)';
-                sprite.style.transform = 'rotate(' + (Math.sin(step*0.2)*3) + 'deg)';
-            }} else {{
-                sprite.style.filter = 'none';
-                sprite.style.transform = 'rotate(0deg)';
-            }}
-
-            // clamp positions so sprite never leaves container
-            x = Math.max(0, Math.min(width - 60, x));
-            y = Math.max(0, Math.min(height - 60, y));
-            sprite.style.left = x + 'px';
-            sprite.style.top = y + 'px';
-
-            // kill by extreme low energy
-            if (energy <= 2 && !died) {{
-                died = true;
-                deathReason = 'Fallo sistémico por energía crítica baja.';
-            }}
-
-            step += 1;
-            elapsedMs += stepInterval;
-            if (elapsedMs >= totalMs || step >= steps || died) {{
-                clearInterval(intervalId);
-                const finalEnergy = energyArr[Math.min(steps-1, step-1)];
-                let verdict = 'VIVO / ADAPTADO';
-                if (died) verdict = 'MUERTO: ' + deathReason;
-                else if (finalEnergy < 40) verdict = 'DEBIL / Sobrevive con dificultades';
-                else if (finalEnergy < 65) verdict = 'PARCIALMENTE adaptado (fatigado)';
-                endText.innerHTML = '<div style="padding:20px; text-align:center;"><strong>Simulación finalizada</strong><br><br>Veredicto: <em>'+verdict+'</em><br><br>Observación final: '+(deathReason || 'Ninguna')+'</div>';
-                endOverlay.style.display = 'flex';
-            }}
-        }}, stepInterval);
-
-    }})();
-    </script>
-    """
-    st.components.v1.html(html, height=payload["height"]+20, scrolling=False)
-
-with col_info:
-    st.subheader("Estado y métricas (precalculos)")
-    st.markdown(f"- **Especie:** {species_name}  \n- **Hábitat base especie:** {habitat}  \n- **Bioma seleccionado (ambiente):** {environment}")
-    st.markdown(f"- **Condiciones iniciales:** Presión {presion_init:.1f} kPa · Temp {temp_init:.1f} °C · O₂ {ox_init:.1f}% · Altitud {altitud_init:.0f} m")
-    st.markdown("---")
-    preview_df = pd.DataFrame({
-        "t (s)": [round(i*STEP_INTERVAL,1) for i in range(min(6, STEPS))],
-        "Energía (preview)": [round(x,2) for x in timeline["energy"][:min(6,STEPS)]],
-        "Vel ratio (preview)": [round(x,2) for x in timeline["speed_ratio"][:min(6,STEPS)]],
-    })
-    st.dataframe(preview_df, use_container_width=True)
+# -------------------------
+# Estado y métricas (ahora VA DEBAJO de la animación)
+# -------------------------
+st.subheader("Estado y métricas (precalculos)")
+st.markdown(f"- **Especie:** {species_name}  \n- **Hábitat base especie:** {habitat}  \n- **Bioma seleccionado (ambiente):** {environment}")
+st.markdown(f"- **Condiciones iniciales:** Presión {presion_init:.1f} kPa · Temp {temp_init:.1f} °C · O₂ {ox_init:.1f}% · Altitud {altitud_init:.0f} m")
+st.markdown("---")
+preview_df = pd.DataFrame({
+    "t (s)": [round(i*STEP_INTERVAL,1) for i in range(min(6, STEPS))],
+    "Energía (preview)": [round(x,2) for x in timeline["energy"][:min(6,STEPS)]],
+    "Vel ratio (preview)": [round(x,2) for x in timeline["speed_ratio"][:min(6,STEPS)]],
+})
+st.dataframe(preview_df, use_container_width=True)
 
 # -------------------------
 # Results and detailed explanation (available immediately below)
