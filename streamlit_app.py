@@ -1,133 +1,148 @@
 import streamlit as st
 import math
 import time
-import random
+import base64
 from PIL import Image
 import io
-import base64
 
 st.set_page_config(page_title="Simulador Biomecánico", page_icon="🦖", layout="wide")
 
-st.title("🦖 Simulador Biomecánico Interactivo")
+st.title("🦖 Simulador Biomecánico Avanzado")
 st.markdown("""
-Explora cómo distintos animales reaccionan biomecánicamente a cambios extremos en su ambiente.
-Sube un fondo y un sprite, ajusta las condiciones y observa cómo el animal lucha por adaptarse.
+Esta simulación muestra cómo los animales —prehistóricos y modernos— reaccionan biomecánica y fisiológicamente a cambios extremos en el ambiente.
+Podrás visualizar su comportamiento dentro del ecosistema y entender los efectos reales de la presión, temperatura, oxígeno y altitud sobre su organismo.
 """)
 
 # --- Parámetros del ecosistema ---
-st.sidebar.header("🌍 Ecosistema y condiciones")
+st.sidebar.header("🌍 Parámetros Ambientales")
 ecosistema = st.sidebar.selectbox(
-    "Selecciona el tipo de ambiente",
+    "Tipo de ecosistema",
     ["Selva", "Desierto", "Tundra", "Montaña", "Fondo marino"]
 )
 
-presion = st.sidebar.slider("Presión atmosférica (atm)", 0.1, 10.0, 1.0, 0.1)
+presion = st.sidebar.slider("Presión (atm)", 0.1, 10.0, 1.0, 0.1)
 temperatura = st.sidebar.slider("Temperatura (°C)", -50, 60, 25)
-oxigeno = st.sidebar.slider("Concentración de oxígeno (%)", 1, 40, 21)
+oxigeno = st.sidebar.slider("Oxígeno (%)", 1, 40, 21)
 altitud = st.sidebar.slider("Altitud (m)", -10000, 8000, 0)
 
 # --- Cargar imágenes ---
 st.sidebar.header("🖼️ Imágenes de simulación")
-bg_file = st.sidebar.file_uploader("Sube una imagen de fondo (ecosistema)", type=["png", "jpg", "jpeg"])
-sprite_file = st.sidebar.file_uploader("Sube el sprite del animal (PNG con fondo transparente)", type=["png"])
+bg_file = st.sidebar.file_uploader("Fondo del ecosistema", type=["png", "jpg", "jpeg"])
+sprite_file = st.sidebar.file_uploader("Sprite del animal (PNG con fondo transparente)", type=["png"])
 
 if not bg_file or not sprite_file:
     st.warning("⬆️ Sube ambas imágenes para iniciar la simulación.")
     st.stop()
 
-# Convertir imágenes a base64 para animarlas en HTML
-def image_to_base64(img_file):
-    return base64.b64encode(img_file.read()).decode()
+def image_to_base64(file):
+    return base64.b64encode(file.read()).decode()
 
 bg_base64 = image_to_base64(bg_file)
 sprite_base64 = image_to_base64(sprite_file)
 
-# --- Funciones biomecánicas ---
+# --- Evaluación biomecánica detallada ---
 def evaluar_adaptacion(presion, temp, oxigeno, altitud, ecosistema):
-    descripcion = []
     energia = 100
+    desc = []
+    datos = {}
 
     # Presión
     if presion > 5:
-        energia -= 30
-        descripcion.append("La presión extrema aplasta los tejidos blandos y dificulta la respiración, reduciendo la movilidad.")
+        energia -= 25
+        desc.append("**Presión extrema:** el sistema respiratorio se colapsa parcialmente. Los vasos sanguíneos se comprimen y la oxigenación muscular cae drásticamente.")
+        datos["Compresión tisular"] = "Alta"
     elif presion < 0.5:
-        energia -= 20
-        descripcion.append("La presión muy baja genera problemas circulatorios y expansión de gases internos, el animal se desorienta.")
+        energia -= 15
+        desc.append("**Presión baja:** los gases internos se expanden, provocando mareo y desorientación. Los movimientos se vuelven erráticos.")
+        datos["Equilibrio barométrico"] = "Inestable"
 
     # Temperatura
     if temp < 0:
         energia -= 25
-        descripcion.append("El frío congela los fluidos corporales, disminuye la velocidad de reacción y causa rigidez muscular.")
+        desc.append("**Frío extremo:** las enzimas metabólicas reducen su eficiencia. El flujo sanguíneo periférico disminuye y los músculos se congelan gradualmente.")
+        datos["Actividad enzimática"] = "Muy baja"
     elif temp > 40:
-        energia -= 35
-        descripcion.append("El calor extremo provoca deshidratación, sobrecalentamiento cerebral y colapso térmico.")
+        energia -= 30
+        desc.append("**Calor extremo:** se produce sobrecalentamiento interno, colapso térmico y alteración neurológica. La velocidad de movimiento cae un 60%.")
+        datos["Tasa de sudoración o jadeo"] = "Elevada"
 
     # Oxígeno
     if oxigeno < 10:
-        energia -= 30
-        descripcion.append("Con poco oxígeno, el metabolismo se desacelera y los músculos pierden fuerza, el animal jadea y se tambalea.")
+        energia -= 35
+        desc.append("**Déficit de oxígeno:** la sangre no puede transportar suficiente O₂. Se observa hipoxia muscular y pérdida de coordinación.")
+        datos["Nivel de oxigenación sanguínea"] = "Críticamente bajo"
     elif oxigeno > 30:
         energia -= 10
-        descripcion.append("El exceso de oxígeno acelera la oxidación celular, lo que podría causar estrés oxidativo.")
+        desc.append("**Exceso de oxígeno:** acelera la oxidación celular, aumentando el riesgo de daño tisular a largo plazo.")
+        datos["Estrés oxidativo"] = "Moderado"
 
     # Altitud
     if altitud > 3000:
         energia -= 20
-        descripcion.append("La altitud reduce la densidad del aire y el oxígeno disponible, dificultando la respiración y el movimiento.")
-    elif altitud < -100:
-        energia -= 15
-        descripcion.append("La presión subacuática es enorme, el animal sufre daños internos y colapsa si no está adaptado al agua.")
+        desc.append("**Altitud elevada:** menor presión parcial de oxígeno. El animal se mueve más lento y su respiración se acelera.")
+        datos["Adaptación pulmonar"] = "Baja"
+    elif altitud < -500:
+        energia -= 20
+        desc.append("**Altitud negativa (subacuática):** la presión hidrostática incrementa, afectando el flujo interno y provocando daños internos.")
+        datos["Presión interna corporal"] = "Excesiva"
 
     # Ecosistema
     if ecosistema == "Fondo marino":
         energia -= 40
-        descripcion.append("Bajo el agua, la mayoría de dinosaurios y mamíferos terrestres no pueden respirar, se agitan antes de hundirse lentamente.")
+        desc.append("**Entorno marino:** si no es acuático, sus pulmones colapsan en segundos. Solo reptiles semiacuáticos podrían resistir brevemente.")
+        datos["Adaptación acuática"] = "Muy baja"
 
+    # Evaluar estado
     if energia > 70:
-        estado = "✅ Se adapta bien al entorno, manteniendo su movilidad."
+        estado = "✅ El animal mantiene sus funciones vitales y se adapta temporalmente."
     elif energia > 40:
-        estado = "⚠️ Sobrevive, pero muestra fatiga y desorientación."
+        estado = "⚠️ El animal sobrevive, pero muestra debilidad muscular y respiración forzada."
     else:
-        estado = "💀 No logra adaptarse y muere tras unos segundos."
+        estado = "💀 El animal colapsa y muere bajo las condiciones actuales."
 
-    return energia, estado, descripcion
+    return energia, estado, desc, datos
 
-# --- Simulación visual ---
-energia, estado, desc = evaluar_adaptacion(presion, temperatura, oxigeno, altitud, ecosistema)
+# --- Calcular resultados ---
+energia, estado, desc, datos = evaluar_adaptacion(presion, temperatura, oxigeno, altitud, ecosistema)
+speed = max(0.6, energia / 40)
+opacity = max(0.3, energia / 100)
 
-# Velocidad de movimiento del sprite según la energía
-speed = max(0.5, energia / 50)
-
-# HTML para animar sprite en el fondo
+# --- Simulación visual HTML ---
 animation_html = f"""
-<div style='position: relative; width: 800px; height: 400px; background-image: url("data:image/png;base64,{bg_base64}");
-background-size: cover; border-radius: 15px; overflow: hidden;'>
-    <img src="data:image/png;base64,{sprite_base64}" id="sprite" 
-         style="position: absolute; bottom: 30px; left: 0px; width: 120px; transition: left {speed}s linear;">
+<div style='position: relative; width: 900px; height: 450px;
+             background-image: url("data:image/png;base64,{bg_base64}");
+             background-size: cover; border-radius: 20px; overflow: hidden;'>
+    <img src="data:image/png;base64,{sprite_base64}" id="sprite"
+         style="position: absolute; bottom: 40px; left: 0px;
+         width: 140px; opacity: {opacity}; transition: left {speed}s linear;">
 </div>
 <script>
 let sprite = document.getElementById("sprite");
 let pos = 0;
 let direction = 1;
 let interval = setInterval(() => {{
-    pos += direction * 20;
+    pos += direction * 30;
     sprite.style.left = pos + 'px';
-    if (pos > 650 || pos < 0) direction *= -1;
-}}, 500);
-setTimeout(() => clearInterval(interval), 10000);
+    if (pos > 750 || pos < 0) direction *= -1;
+}}, 600);
+setTimeout(() => clearInterval(interval), 12000);
 </script>
 """
 
 st.markdown(animation_html, unsafe_allow_html=True)
-st.subheader("📖 Análisis Biomecánico del Entorno")
-st.write(f"**Resultado:** {estado}")
-st.progress(energia / 100)
-for d in desc:
-    st.markdown(f"• {d}")
 
+# --- Información científica extendida ---
+st.subheader("📊 Resultados de la simulación biomecánica")
+st.write(f"**Estado final:** {estado}")
+st.progress(energia / 100)
+st.markdown("### 🔬 Explicaciones fisiológicas y biomecánicas detalladas:")
+for d in desc:
+    st.markdown(f"- {d}")
+
+st.markdown("### 📈 Parámetros fisiológicos afectados:")
+for k, v in datos.items():
+    st.write(f"**{k}:** {v}")
+
+# --- Botón de reinicio ---
 if st.button("🔄 Reiniciar simulación"):
     st.experimental_rerun()
-
-
-
