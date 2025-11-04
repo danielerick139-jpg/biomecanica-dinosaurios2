@@ -2,61 +2,104 @@
 import streamlit as st
 import base64, json, math, time
 import pandas as pd
-from io import BytesIO
-from PIL import Image
 import numpy as np
+from io import BytesIO
 
 st.set_page_config(page_title="Simulador Biomecánico — Visual (20 s)", layout="wide")
 st.title("🦖 Simulador Biomecánico Visual — Movimiento por hábitat")
 
 # -------------------------
-# Especies (hábitat: 'terrestre','marino','volador')
+# Especies y valores base
 # -------------------------
 SPECIES = {
-    "Tyrannosaurus rex": {"masa": 7000, "femur": 1.2, "habitat": "terrestre", "temp_opt": 30, "ox_opt": 21},
-    "Velociraptor mongoliensis": {"masa": 15, "femur": 0.8, "habitat": "terrestre", "temp_opt": 32, "ox_opt": 21},
-    "Brachiosaurus altithorax": {"masa": 35000, "femur": 2.5, "habitat": "terrestre", "temp_opt": 28, "ox_opt": 21},
-    "Spinosaurus aegyptiacus": {"masa": 6000, "femur": 1.5, "habitat": "marino", "temp_opt": 28, "ox_opt": 20},
-    "Crocodylus (Cocodrilo)": {"masa": 1000, "femur": 0.9, "habitat": "marino", "temp_opt": 29, "ox_opt": 20},
-    "Aquila chrysaetos (Águila)": {"masa": 6, "femur": 0.25, "habitat": "volador", "temp_opt": 40, "ox_opt": 21},
+    "Tyrannosaurus rex": {"masa": 7000, "femur": 1.2, "habitat": "terrestre", "temp_opt": 30.0, "ox_opt": 21.0},
+    "Velociraptor mongoliensis": {"masa": 15, "femur": 0.8, "habitat": "terrestre", "temp_opt": 32.0, "ox_opt": 21.0},
+    "Brachiosaurus altithorax": {"masa": 35000, "femur": 2.5, "habitat": "terrestre", "temp_opt": 28.0, "ox_opt": 21.0},
+    "Spinosaurus aegyptiacus": {"masa": 6000, "femur": 1.5, "habitat": "marino", "temp_opt": 28.0, "ox_opt": 20.0},
+    "Crocodylus (Cocodrilo)": {"masa": 1000, "femur": 0.9, "habitat": "marino", "temp_opt": 29.0, "ox_opt": 20.0},
+    "Aquila chrysaetos (Águila)": {"masa": 6, "femur": 0.25, "habitat": "volador", "temp_opt": 40.0, "ox_opt": 21.0},
+}
+
+# Default UI values (used to reset)
+DEFAULTS = {
+    "species_name": list(SPECIES.keys())[0],
+    "environment": "Llanura",
+    "presion_init": 101.3,
+    "temp_init": 25,
+    "ox_init": 21,
+    "altitud_init": 0,
+    "dyn_intensity": 0.45,
+    "seed": 12345,
 }
 
 # -------------------------
-# Sidebar inputs
+# Helper: set session defaults for widget keys
+# -------------------------
+def ensure_session_defaults():
+    for k, v in DEFAULTS.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+ensure_session_defaults()
+
+# -------------------------
+# Sidebar (widgets have explicit keys so we can reset them)
 # -------------------------
 st.sidebar.header("Configuración de la simulación (20 s)")
-species_name = st.sidebar.selectbox("Selecciona especie", list(SPECIES.keys()))
-environment = st.sidebar.selectbox("Selecciona bioma/ambiente (donde se coloca el animal)", [
-    "Llanura", "Selva", "Desierto", "Montaña", "Fondo marino"
-])
-bg_file = st.sidebar.file_uploader("Sube fondo (PNG/JPG)", type=["png","jpg","jpeg"])
-sprite_file = st.sidebar.file_uploader("Sube sprite (PNG con transparencia preferible)", type=["png"])
+
+species_name = st.sidebar.selectbox("Selecciona especie", list(SPECIES.keys()),
+                                    index=list(SPECIES.keys()).index(st.session_state.get("species_name", DEFAULTS["species_name"])),
+                                    key="species_name")
+
+environment = st.sidebar.selectbox("Selecciona bioma/ambiente (donde se coloca el animal)",
+                                   ["Llanura", "Selva", "Desierto", "Montaña", "Fondo marino"],
+                                   index=["Llanura", "Selva", "Desierto", "Montaña", "Fondo marino"].index(st.session_state.get("environment", DEFAULTS["environment"])),
+                                   key="environment")
+
+bg_file = st.sidebar.file_uploader("Sube fondo (PNG/JPG)", type=["png","jpg","jpeg"], key="bg_file")
+sprite_file = st.sidebar.file_uploader("Sube sprite (PNG con transparencia preferible)", type=["png"], key="sprite_file")
 st.sidebar.markdown("---")
 st.sidebar.subheader("Condiciones físicas iniciales (valores base)")
-presion_init = st.sidebar.slider("Presión (kPa)", 20.0, 200.0, 101.3, step=0.1)
-temp_init = st.sidebar.slider("Temperatura (°C)", -30, 60, 25)
-ox_init = st.sidebar.slider("Oxígeno (%)", 1, 40, 21)
-altitud_init = st.sidebar.slider("Altitud (m)", -10000, 8000, 0)
+
+presion_init = st.sidebar.slider("Presión (kPa)", 20.0, 200.0, float(st.session_state.get("presion_init", DEFAULTS["presion_init"])), step=0.1, key="presion_init")
+temp_init = st.sidebar.slider("Temperatura (°C)", -30, 60, int(st.session_state.get("temp_init", DEFAULTS["temp_init"])), key="temp_init")
+ox_init = st.sidebar.slider("Oxígeno (%)", 1, 40, int(st.session_state.get("ox_init", DEFAULTS["ox_init"])), key="ox_init")
+altitud_init = st.sidebar.slider("Altitud (m)", -10000, 8000, int(st.session_state.get("altitud_init", DEFAULTS["altitud_init"])), key="altitud_init")
 st.sidebar.markdown("---")
 st.sidebar.subheader("Dinámica")
-dyn_intensity = st.sidebar.slider("Intensidad de variación dinámica (0=estable → 1=muy dinámica)", 0.0, 1.0, 0.45, step=0.05)
-seed = st.sidebar.number_input("Semilla aleatoria (opcional)", value=12345, step=1)
-st.sidebar.markdown("---")
-start_btn = st.sidebar.button("▶️ Iniciar simulación (20 s)")
-reset_btn = st.sidebar.button("🔄 Reiniciar todo")
 
-# Reset handler
+dyn_intensity = st.sidebar.slider("Intensidad de variación dinámica (0=estable → 1=muy dinámica)", 0.0, 1.0, float(st.session_state.get("dyn_intensity", DEFAULTS["dyn_intensity"])), step=0.05, key="dyn_intensity")
+seed = st.sidebar.number_input("Semilla aleatoria (opcional)", value=int(st.session_state.get("seed", DEFAULTS["seed"])), step=1, key="seed")
+st.sidebar.markdown("---")
+
+start_btn = st.sidebar.button("▶️ Iniciar simulación (20 s)", key="start_btn")
+reset_btn = st.sidebar.button("🔄 Reiniciar todo y valores base", key="reset_btn")
+
+# Reset handler: restore session_state defaults and clear caches
 if reset_btn:
-    for k in list(st.session_state.keys()):
-        try:
-            del st.session_state[k]
-        except Exception:
-            pass
+    # restore widget keys to defaults
+    for k, v in DEFAULTS.items():
+        st.session_state[k] = v
+    # clear uploaded files (can't programmatically clear file_uploader UI, but we remove their session_state entries)
+    for key in ("bg_file", "sprite_file"):
+        if key in st.session_state:
+            try:
+                del st.session_state[key]
+            except Exception:
+                pass
+    # clear other derived keys
+    for key in list(st.session_state.keys()):
+        if key not in DEFAULTS and key not in ("species_name","environment","presion_init","temp_init","ox_init","altitud_init","dyn_intensity","seed","bg_file","sprite_file","start_btn","reset_btn"):
+            try:
+                del st.session_state[key]
+            except Exception:
+                pass
+    # rerun to update widgets
     st.experimental_rerun()
 
 # Validate images
-if not bg_file or not sprite_file:
-    st.info("Sube fondo y sprite en la barra lateral para activar la simulación.")
+if (not bg_file) or (not sprite_file):
+    st.info("Sube fondo y sprite en la barra lateral para activar la simulación. (Puedes volver a Reiniciar para restaurar valores base.)")
     st.stop()
 
 # Utility: convert uploaded file to base64 string for embedding
@@ -83,7 +126,7 @@ mass = spec["masa"]
 # Movement region fractions depending on habitat (fractions of container height)
 REGION = {
     "terrestre": {"y_min_frac": 0.65, "y_max_frac": 0.85},
-    "marino": {"y_min_frac": 0.1, "y_max_frac": 0.85},
+    "marino": {"y_min_frac": 0.10, "y_max_frac": 0.85},
     "volador": {"y_min_frac": 0.05, "y_max_frac": 0.5},
 }
 
@@ -102,6 +145,7 @@ def compute_stepwise_evolution(presion0, temp0, ox0, alt0, dyn_intensity, steps,
     energy = 100.0
 
     for i in range(steps):
+        # small deterministic time increment
         t = i * step_interval
 
         # dynamic drift: random walk scaled by intensity
@@ -111,10 +155,10 @@ def compute_stepwise_evolution(presion0, temp0, ox0, alt0, dyn_intensity, steps,
         alt += (np.random.randn() * 5.0) * dyn_intensity
 
         # clamp realistic ranges
-        pres = max(20.0, min(200.0, pres))
-        temp = max(-50.0, min(60.0, temp))
-        ox = max(1.0, min(40.0, ox))
-        alt = max(-10000.0, min(8000.0, alt))
+        pres = float(max(20.0, min(200.0, pres)))
+        temp = float(max(-50.0, min(60.0, temp)))
+        ox = float(max(1.0, min(40.0, ox)))
+        alt = float(max(-10000.0, min(8000.0, alt)))
 
         # oxygen partial approx: pressure * O2 fraction adjusted by altitude
         ox_partial = (pres / 101.3) * (ox / 21.0) * math.exp(-alt / 7000.0)
@@ -137,7 +181,7 @@ def compute_stepwise_evolution(presion0, temp0, ox0, alt0, dyn_intensity, steps,
         msg_parts = []
         if abs(temp_diff) > 6:
             if temp_diff < 0:
-                msg_parts.append(f"Frío pronunciado (Δ {temp_diff:.1f} °C): contracción muscular y reducción en velocidad de contracción.")
+                msg_parts.append(f"Frío pronunciado (Δ {temp_diff:.1f} °C): contracción muscular y reducción en velocidad.")
             else:
                 msg_parts.append(f"Calor pronunciado (Δ +{temp_diff:.1f} °C): riesgo de hipertermia y deshidratación.")
         if ox_factor < 0.85:
@@ -147,9 +191,15 @@ def compute_stepwise_evolution(presion0, temp0, ox0, alt0, dyn_intensity, steps,
         if pres < 60:
             msg_parts.append("Presión baja: expansión de gases internos y mareo.")
         if alt > 3000:
-            msg_parts.append("Altitud alta: menor presión parcial de O₂.")
+            msg_parts.append("Altitud alta: disminución de presión parcial de O₂.")
         if alt < -200:
-            msg_parts.append("Condiciones HOY subacuáticas profundas: riesgo de compresión hidrostática.")
+            msg_parts.append("Presión hidrostática alta (subacuática): riesgo de daño por compresión.")
+
+        # habitat mismatch messages
+        if environment == "Fondo marino" and habitat != "marino":
+            msg_parts.append("Ambiente marino detectado: organismo no adaptado muestra signos de inmersión y estrés respiratorio.")
+        if environment != "Fondo marino" and habitat == "marino":
+            msg_parts.append("Organismo marino fuera del agua: desecación y fallo respiratorio progresivo.")
 
         narrative = " ".join(msg_parts) if msg_parts else "Condiciones dentro de parámetros operativos."
 
@@ -190,7 +240,7 @@ with col_anim:
     html = f"""
     <div id="sim_container" style="width:{payload['width']}px; height:{payload['height']}px; border-radius:12px; overflow:hidden; position:relative;
         background-image:url('data:image/png;base64,{payload['bg_b64']}'); background-size:cover; background-position:center;">
-        <img id="animal_sprite" src="data:image/png;base64,{payload['sprite_b64']}" style="position:absolute; left:0px; top:0px; width:120px; transition: left 0.3s linear, top 0.3s linear, opacity 0.4s linear, transform 0.4s linear;"/>
+        <img id="animal_sprite" src="data:image/png;base64,{payload['sprite_b64']}" style="position:absolute; left:0px; top:0px; width:120px; transition: left 0.35s linear, top 0.35s linear, opacity 0.35s linear, transform 0.35s linear;"/>
         <div id="hud" style="position:absolute; left:10px; top:10px; background:rgba(0,0,0,0.45); color:white; padding:8px; border-radius:6px; font-family:Arial, sans-serif;">
             <div id="timer">Tiempo: 0s</div>
             <div id="energy">Energía: 100</div>
@@ -232,27 +282,28 @@ with col_anim:
         const xMax = Math.floor(0.92 * width);
 
         // initial position depends on habitat & environment
-        let x = Math.floor((xMin + xMax) / 4); // start left-ish
+        let x = Math.floor((xMin + xMax) / 8); // start left-ish
         let y;
         if (habitat === 'volador') {{
             y = Math.floor(height * 0.08); // start near top
         }} else if (habitat === 'marino') {{
-            y = Math.floor(height * 0.12); // start near surface (top)
+            y = Math.floor(height * 0.12); // start near surface/top
         }} else {{
-            // terrestrial start lower
-            y = Math.floor(yMin + (yMax - yMin) * 0.1);
+            # terrestrial start lower within band
+            y = Math.floor(yMin + (yMax - yMin) * 0.05);
         }}
         sprite.style.left = x + 'px';
         sprite.style.top = y + 'px';
 
-        // For terrestrial: move in straight line horizontally across bottom band
-        // For volador: move horizontally but maintain altitude; if energy low -> descend progressively
-        // For marino: if species habitat == environment (marino), swim (2D), else sink slowly
+        // For terrestrial: move horizontally, bounce at edges; minimal vertical bob
+        // For volador: maintain altitude unless energy low -> descend
+        // For marino: if environment is marine and species marine => swim 2D; else sink
 
         let step = 0;
         let elapsedMs = 0;
         let died = false;
         let deathReason = "";
+        let dir = 1; // horizontal direction for terrestrial/volador
 
         let intervalId = setInterval(() => {{
             const idx = Math.min(step, steps-1);
@@ -262,86 +313,84 @@ with col_anim:
 
             timerEl.innerText = 'Tiempo: ' + Math.round(elapsedMs/1000) + ' s';
             energyEl.innerText = 'Energía: ' + energy;
-            narrEl.innerText = narrative ? ('Estado: ' + narrative) : 'Estado: sin eventos significativos';
+            narrEl.innerText = narrative ? ('Estado: ' + narrative) : 'Estado: sin eventos';
 
-            // Movement logic
+            // Movement logic by habitat
             if (habitat === 'terrestre') {{
-                // fixed bottom band: keep y within small range
-                const targetX = x + Math.round((xMax - x) * (0.15 + 0.7 * speedRatio) / 6.0);
-                // move mainly to the right in straight-ish line; small vertical bob
-                x = Math.min(xMax, targetX);
+                // move horizontally in straight line within bottom band
+                const step_px = Math.round((4 + 18 * speedRatio) * dir); // speed depends on energy
+                x = x + step_px;
+                // small bob
                 const bob = Math.round(Math.sin(step * 0.6) * 4);
-                y = Math.min(height - 60, Math.max(yMin, Math.floor(yMin + (yMax-yMin)*0.05) + bob));
-                // if environment is marine and species terrestrial, water effect: sink & fade
-                if (environment === 'Fondo marino' && habitat === 'terrestre') {{
-                    // sink gradually: increase y (toward bottom)
+                y = Math.floor(yMin + (yMax - yMin) * 0.06) + bob;
+
+                // bounce on edges
+                if (x >= xMax) {{ x = xMax; dir = -1; }}
+                if (x <= xMin) {{ x = xMin; dir = 1; }}
+
+                // If placed in marine environment and not marine species -> sink
+                if (environment === 'Fondo marino' && habitat !== 'marino') {{
                     y += Math.round((1.0 - speedRatio) * 8);
-                    sprite.style.opacity = Math.max(0.15, 1.0 * (energy/100));
-                    if (y > (height - 80)) {{
-                        died = true; deathReason = 'Hundimiento en ambiente marino (no adaptado).';
-                    }}
+                    sprite.style.opacity = Math.max(0.12, energy/100);
+                    if (y > height - 80) {{ died = true; deathReason = 'Hundimiento/Asfixia en ambiente marino.'; }}
                 }}
             }} else if (habitat === 'volador') {{
-                // maintain high flight initially
-                let targetX = x + Math.round((xMax - x) * (0.12 + 0.6 * speedRatio) / 6.0);
-                x = Math.min(xMax, targetX);
-                // altitude changes if energy low
+                // horizontal motion with altitude maintenance; descent if low energy
+                const step_px = Math.round((6 + 24 * speedRatio) * dir);
+                x = x + step_px;
+                if (x >= xMax) {{ x = xMax; dir = -1; }}
+                if (x <= xMin) {{ x = xMin; dir = 1; }}
+
                 if (energy < 60) {{
-                    // start descending slowly
-                    y += Math.round((60 - energy) / 12.0);
+                    // descend proportionally to energy deficit
+                    y += Math.round((60 - energy) / 10.0);
                 }} else {{
-                    // small altitude variations
-                    y = Math.max(10, Math.min(Math.floor(yMax*0.6), y + Math.round(Math.sin(step*0.7)*3)));
+                    // small variations
+                    y = Math.max(5, Math.min(Math.floor(yMax*0.6), y + Math.round(Math.sin(step*0.7)*3)));
                 }}
-                // if environment is marine and species volador, falling into water possible
-                if (environment === 'Fondo marino' && habitat === 'volador' && energy < 30) {{
+
+                if (environment === 'Fondo marino' && energy < 30) {{
                     y += 6 + Math.round((30 - energy)/6.0);
                 }}
                 sprite.style.opacity = Math.max(0.2, energy / 100);
-                if (y > height - 80) {{
-                    // hit bottom/water => dead or drowned
-                    died = true; deathReason = 'Caída/impacto fatal o inmersión (volador en ambiente inadecuado).';
-                }}
+                if (y > height - 80) {{ died = true; deathReason = 'Caída/impacto fatal o inmersión (volador).'; }}
             }} else if (habitat === 'marino') {{
-                // if species is marine and environment marine => swim freely inside region (2D random walk biased by speed)
+                // if environment is marine and species marine => swim 2D random walk biased by speed
                 if (environment === 'Fondo marino') {{
-                    // random target biased by speed
+                    // target towards random points; movement scaled by speedRatio
                     let tx = Math.floor(Math.random() * (xMax - xMin) + xMin);
                     let ty = Math.floor(Math.random() * (yMax - yMin) + yMin);
-                    x = Math.round(x + (tx - x) * (0.25 + 0.7 * speedRatio));
-                    y = Math.round(y + (ty - y) * (0.25 + 0.7 * speedRatio));
-                    sprite.style.opacity = Math.max(0.2, energy / 100);
+                    x = Math.round(x + (tx - x) * (0.18 + 0.7 * speedRatio));
+                    y = Math.round(y + (ty - y) * (0.18 + 0.7 * speedRatio));
+                    sprite.style.opacity = Math.max(0.25, energy / 100);
                 }} else {{
-                    // species is marine but environment is terrestrial: it will sink/have trouble on land (be out of water)
-                    // move down slightly and fade
-                    y += Math.round((1.0 - speedRatio) * 6);
+                    // marine species out of water -> slide/fall and fade
+                    y += Math.round((1.0 - speedRatio) * 8);
                     sprite.style.opacity = Math.max(0.05, energy / 100);
-                    if (y > height - 80) {{
-                        died = true; deathReason = 'Exposición fuera del agua: fallo por desecación o incapacidad respiratoria.';
-                    }}
+                    if (y > height - 80) {{ died = true; deathReason = 'Exposición fuera del agua: fallo respiratorio.'; }}
                 }}
             }}
 
-            // apply filters based on energy
+            // Visual filters by energy
             if (energy < 30) {{
                 sprite.style.filter = 'grayscale(80%) brightness(65%)';
                 sprite.style.transform = 'rotate(' + (Math.sin(step*0.3)*6) + 'deg)';
             }} else if (energy < 60) {{
-                sprite.style.filter = 'grayscale(30%) brightness(85%)';
+                sprite.style.filter = 'grayscale(35%) brightness(85%)';
                 sprite.style.transform = 'rotate(' + (Math.sin(step*0.2)*3) + 'deg)';
             }} else {{
                 sprite.style.filter = 'none';
                 sprite.style.transform = 'rotate(0deg)';
             }}
 
-            // clamp
+            // clamp positions so sprite never leaves container
             x = Math.max(0, Math.min(width - 60, x));
             y = Math.max(0, Math.min(height - 60, y));
             sprite.style.left = x + 'px';
             sprite.style.top = y + 'px';
 
-            // death conditions by energy very low
-            if (energy <= 3 && !died) {{
+            // kill by extreme low energy
+            if (energy <= 2 && !died) {{
                 died = true;
                 deathReason = 'Fallo sistémico por energía crítica baja.';
             }}
@@ -350,13 +399,12 @@ with col_anim:
             elapsedMs += stepInterval;
             if (elapsedMs >= totalMs || step >= steps || died) {{
                 clearInterval(intervalId);
-                // finalize: compute final verdict from last energy & died flag
                 const finalEnergy = energyArr[Math.min(steps-1, step-1)];
                 let verdict = 'VIVO / ADAPTADO';
                 if (died) verdict = 'MUERTO: ' + deathReason;
                 else if (finalEnergy < 40) verdict = 'DEBIL / Sobrevive con dificultades';
                 else if (finalEnergy < 65) verdict = 'PARCIALMENTE adaptado (fatigado)';
-                endText.innerHTML = '<div style="padding:20px; text-align:center;"><strong>Simulación finalizada</strong><br><br>Veredicto: <em>'+verdict+'</em><br><br>Observación final (cliente): '+(deathReason || 'Ninguna')+'</div>';
+                endText.innerHTML = '<div style="padding:20px; text-align:center;"><strong>Simulación finalizada</strong><br><br>Veredicto: <em>'+verdict+'</em><br><br>Observación final: '+(deathReason || 'Ninguna')+'</div>';
                 endOverlay.style.display = 'flex';
             }}
         }}, stepInterval);
@@ -413,9 +461,9 @@ explanacion.append(f"Hábitat base especie: **{habitat}**. Bioma seleccionado: *
 explanacion.append(f"Condiciones iniciales: presión {presion_init:.1f} kPa, temperatura {temp_init:.1f} °C, O₂ {ox_init:.1f}%, altitud {altitud_init:.0f} m.")
 explanacion.append("")
 explanacion.append("Durante los 20 segundos la simulación varió condiciones (drift aleatorio calibrado por intensidad). Se calculó una métrica energética (0–100) que resume la capacidad del organismo para sostener metabolismo y locomoción. El comportamiento observacional en la animación depende de tres procesos biomecánicos principales:")
-explanacion.append("1. **Intercambio gaseoso:** la eficiencia ventilatoria depende de la diferencia de presión parcial de O₂ y la estructura pulmonar. En baja presión o baja fracción de O₂ la entrega de oxígeno a músculo disminuye (hipoxia) y la potencia muscular cae.")
-explanacion.append("2. **Cinemática muscular y térmica:** la temperatura altera la cinética enzimática y la velocidad de contracción. Temperaturas muy bajas ralentizan los ciclos de puente cruzado (contracción), y temperaturas altas producen fatiga y fallo térmico.")
-explanacion.append("3. **Carga mecánica por presión/densidad del medio:** en medios densos (agua) o con presiones altas, la ventilación y la perfusión se ven afectadas y la mecánica respiratoria puede colapsar; además la flotabilidad y resistencia al movimiento cambian la potencia locomotora requerida.")
+explanacion.append("1. **Intercambio gaseoso:** la eficiencia ventilatoria depende de la presión parcial de O₂ y la estructura pulmonar. En baja presión o baja fracción de O₂ la entrega de oxígeno a músculo disminuye (hipoxia) y la potencia muscular cae.")
+explanacion.append("2. **Cinemática muscular y térmica:** la temperatura altera la cinética enzimática y la velocidad de contracción. Temperaturas muy bajas ralentizan, y temperaturas altas pueden causar fallo térmico.")
+explanacion.append("3. **Carga mecánica por presión/densidad del medio:** en medios densos (agua) o con presiones altas, la ventilación y la perfusión se ven afectadas; la flotabilidad y resistencia cambian la potencia locomotora requerida.")
 explanacion.append("")
 # drivers identification
 drivers = []
@@ -439,13 +487,13 @@ else:
 explanacion.append("")
 explanacion.append("**Recomendaciones adaptativas hipotéticas (educativas):**")
 if final_energy < 50:
-    explanacion.append("- Aumentar capacidad pulmonar (sacos aéreos, mayor superficie de intercambio) y mejorar transporte sanguíneo (hematocrito/hemoglobinas).")
+    explanacion.append("- Aumentar capacidad pulmonar (sacos aéreos, mayor superficie de intercambio) y mejorar transporte sanguíneo.")
     explanacion.append("- Comportamientos: buscar microhábitats con mayor O₂ o sombra, reducir actividad motora hasta recuperar energía.")
-    explanacion.append("- Morfológicas: reducir masa efectiva, extremidades más robustas para soportar mayor carga en presiones altas.")
+    explanacion.append("- Morfológicas: reducir masa efectiva; patas/alas adaptadas para la nueva densidad o presión.")
 else:
     explanacion.append("- El organismo no requiere cambios inmediatos. Mantener acceso a recursos y refugios es suficiente.")
 explanacion.append("")
-explanacion.append("**Limitaciones:** Este es un modelo simplificado y educativo. Para trabajo científico se recomienda calibración con datos empíricos y modelos fisiológicos detallados (respiración, termorregulación, intercambio gaseoso, etc.).")
+explanacion.append("**Limitaciones:** Este es un modelo didáctico y simplificado. Para uso científico requiere calibración con datos empíricos y modelos fisiológicos más profundos.")
 
 st.markdown("\n".join(explanacion))
 
@@ -454,3 +502,4 @@ st.dataframe(pd.concat([results_df.head(4), results_df.tail(4)]).reset_index(dro
 
 csv = results_df.to_csv(index=False).encode('utf-8')
 st.download_button("⬇️ Descargar datos de la simulación (CSV)", csv, file_name=f"sim_{species_name.replace(' ','_')}.csv", mime="text/csv")
+
